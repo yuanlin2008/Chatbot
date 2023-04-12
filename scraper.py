@@ -9,6 +9,7 @@ import os
 import win32api
 import win32con
 import tqdm
+import json
 
 def init_browser():
     """
@@ -66,17 +67,22 @@ def cache_dyn_page_mouse(browser:webdriver.Chrome, num:int):
     time.sleep(2)
 
 
-TOPIC_TO_LINKS_DIR = "./topic_top_links"
+TOPIC_TOP_LINKS_DIR = "./data/topic_top_links"
 
-def zhihu_topic_top_links(browser:webdriver.Chrome, url:str, num:int):
+def fetch_zhihu_topic_top_links(browser:webdriver.Chrome, topic:str, num:int):
     """
     抓取知乎话题精华链接列表.
     """
-    browser.get(url)
+    browser.get(f'https://www.zhihu.com/search?q={topic}&type=topic')
+    wait = WebDriverWait(browser, 10)
+    topic_link = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="SearchMain"]/div/div/div/div/div[2]/div/div/div/div[2]/h2/span/div/a'))).get_attribute('href')
+    topic_link += '/top-answers'
+    print(topic_link)
+    browser.get(topic_link)
     cache_dyn_page_mouse(browser, num)
 
-    if not os.path.exists(TOPIC_TO_LINKS_DIR):
-        os.makedirs(TOPIC_TO_LINKS_DIR)
+    if not os.path.exists(TOPIC_TOP_LINKS_DIR):
+        os.makedirs(TOPIC_TOP_LINKS_DIR)
 
     wait = WebDriverWait(browser, 10)
     # 话题名称
@@ -84,7 +90,7 @@ def zhihu_topic_top_links(browser:webdriver.Chrome, url:str, num:int):
     # 话题列表.
     topics = browser.find_elements(By.CLASS_NAME, 'List-item.TopicFeedItem')
     valid_num = 0
-    with open(f'{TOPIC_TO_LINKS_DIR}/{topic_name}.txt', 'w') as f:
+    with open(f'{TOPIC_TOP_LINKS_DIR}/{topic_name}.txt', 'w') as f:
         for topic in topics:
             try:
                 ref = topic.find_element(By.XPATH, 'div/div/h2/div/a').get_attribute('href')
@@ -95,16 +101,24 @@ def zhihu_topic_top_links(browser:webdriver.Chrome, url:str, num:int):
                 f.write(f'{ref}\n')
     print(f'话题:{topic_name}({valid_num}/{len(topics)})')
 
-def zhihu_topic(browser:webdriver.Chrome, topic:str, num:int):
+def fetch_zhihu_qa(browser:webdriver.Chrome, url:str):
     """
-    抓取知乎话题
+    抓取知乎一个问答
     """
-    browser.get(f'https://www.zhihu.com/search?q={topic}&type=topic')
+    browser.get(url)
     wait = WebDriverWait(browser, 10)
-    topic_link = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="SearchMain"]/div/div/div/div/div[2]/div/div/div/div[2]/h2/span/div/a'))).get_attribute('href')
-    topic_link += '/top-answers'
-    print(topic_link)
-    zhihu_topic_top_links(browser, topic_link, num)
+    qa = {}
+    qa['url'] = url
+    qa['question_title'] = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'h1.QuestionHeader-title'))).get_attribute('textContent')
+    #wait.until(EC.presence_of_element_located((By.XPATH,                        '//*[@id="root"]/div/main/div/div/div[1]/div[2]/div/div[1]/div[1]/div[3]/div/div/div/button'))).click()
+    #qa['question_text'] = wait.until(EC.presence_of_element_located((By.XPATH,  '//*[@id="root"]/div/main/div/div/div[1]/div[2]/div/div[1]/div[1]/div[3]/div/div/div/div/span'))).get_attribute('innerHTML')
+    qa['answer'] = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '.AnswerCard .css-1g0fqss'))).get_attribute('innerHTML')
+    vote_str = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '.AnswerCard .Voters > .Button.FEfUrdfMIKpQDJDqkjte.Button--plain.fEPKGkUK5jyc4fUuT0QP'))).get_attribute('textContent')
+    print(vote_str)
+    qa['voters'] = int(vote_str.split()[0].replace(',', ''))
+
+    print(qa)
+    return qa
 
 TOPICS = [
     "职场",
@@ -113,6 +127,18 @@ TOPICS = [
 ]
 
 b = init_browser()
+#for t in TOPICS:
+    #fetch_zhihu_topic_top_links(b, t, 200)
+qa_links = []
 for t in TOPICS:
-    zhihu_topic(b, t, 200)
+    with open(f'{TOPIC_TOP_LINKS_DIR}/{t}.txt', "r") as f:
+        qa_links.extend(f.read().splitlines())
+qa = []
+for qa_link in tqdm.tqdm(qa_links):
+    print(qa_link)
+    qa.append(fetch_zhihu_qa(b, qa_link))
+
+with open('./data/qa.txt', 'w') as f:
+    json.dumps(qa, f)
+
 b.quit()
