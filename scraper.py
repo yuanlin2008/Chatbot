@@ -96,6 +96,9 @@ def zhihu_topic_top_links(browser:webdriver.Chrome, url:str, num:int):
     print(f'话题:{topic_name}({valid_num}/{len(topics)})')
 
 def zhihu_topic(browser:webdriver.Chrome, topic:str, num:int):
+    """
+    抓取知乎话题
+    """
     browser.get(f'https://www.zhihu.com/search?q={topic}&type=topic')
     wait = WebDriverWait(browser, 10)
     topic_link = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="SearchMain"]/div/div/div/div/div[2]/div/div/div/div[2]/h2/span/div/a'))).get_attribute('href')
