@@ -9,7 +9,7 @@ import os
 import win32api
 import win32con
 import tqdm
-import json
+import typer
 import database
 
 def init_browser(headless = False):
@@ -68,9 +68,9 @@ def cache_dyn_page_mouse(browser:webdriver.Chrome, num:int):
     time.sleep(2)
 
 
-def fetch_zhihu_topic_top_links(browser:webdriver.Chrome, topic:str, num:int):
+def update_topic(browser:webdriver.Chrome, topic:str, num:int):
     """
-    抓取知乎话题精华链接列表.
+    更新知乎话题精华链接列表.
     """
     # 搜索话题
     browser.get(f'https://www.zhihu.com/search?q={topic}&type=topic')
@@ -100,9 +100,9 @@ def fetch_zhihu_topic_top_links(browser:webdriver.Chrome, topic:str, num:int):
                 new_num+=1
     print(f'话题:{topic_name}({new_num}/{valid_num}/{len(topics)})')
 
-def fetch_zhihu_qa(browser:webdriver.Chrome, id:int, url:str):
+def update_qa(browser:webdriver.Chrome, id:int, url:str):
     """
-    抓取知乎一个问答
+    更新知乎一个问答
     """
     # qa
     browser.get(url)
@@ -124,27 +124,33 @@ def fetch_zhihu_qa(browser:webdriver.Chrome, id:int, url:str):
         tags.append(t.get_attribute('textContent'))
     database.update_qa(id, question, answer_raw, voters, author, tags)
 
-TOPICS = [
-    "职场",
-    "教育",
-    "文化",
-]
-
-def fetch_zhihu_qa_links():
-    b = init_browser()
-    database.open()
-    for t in TOPICS:
-        fetch_zhihu_topic_top_links(b, t, 10)
-    database.close()
-    b.quit()
-
-def fetch_zhihu_all_qa():
-    b = init_browser(True)
-    database.open()
+def update_all_qa(browser:webdriver.Chrome):
+    print("开始更新问答")
     for new_qa in tqdm.tqdm(database.select_new_qa()):
-        fetch_zhihu_qa(b, *new_qa)
-    database.close()
-    b.quit()
+        update_qa(browser, *new_qa)
 
-#fetch_zhihu_qa_links()
-fetch_zhihu_all_qa()
+app = typer.Typer()
+
+@app.command()
+def topic(topic:str, time:int = 60):
+    database.open()
+    b = init_browser()
+    update_topic(b, topic, time)
+    b.quit()
+    b = init_browser(True)
+    update_all_qa(b)
+    b.quit()
+    database.close()
+
+@app.command()
+def author(author:str):
+    database.open()
+    b = init_browser()
+    # 更新用户问答.
+    update_all_qa(b)
+    b.quit()
+    database.close()
+    pass
+
+if __name__ == "__main__":
+    app()
