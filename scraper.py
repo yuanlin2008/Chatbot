@@ -96,7 +96,7 @@ def fetch_zhihu_topic_top_links(browser:webdriver.Chrome, topic:str, num:int):
             pass
         else:
             valid_num+=1
-            if database.insert_new_qa(ref):
+            if database.insert_qa(ref):
                 new_num+=1
     print(f'话题:{topic_name}({new_num}/{valid_num}/{len(topics)})')
 
@@ -104,18 +104,25 @@ def fetch_zhihu_qa(browser:webdriver.Chrome, id:int, url:str):
     """
     抓取知乎一个问答
     """
+    # qa
     browser.get(url)
     wait = WebDriverWait(browser, 10)
     question = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'h1.QuestionHeader-title'))).get_attribute('textContent')
     answer_raw = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '.AnswerCard .css-1g0fqss'))).get_attribute('innerHTML')
     vote_str = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '.AnswerCard .Voters > .Button.FEfUrdfMIKpQDJDqkjte.Button--plain.fEPKGkUK5jyc4fUuT0QP'))).get_attribute('textContent')
     voters = int(vote_str.split()[0].replace(',', ''))
+    author = None
+    try:
+        author_elem = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '.AnswerAuthor-user-name')))
+        author = author_elem.find_element(By.CSS_SELECTOR, 'a.UserLink-link').get_attribute('textContent')
+    except:
+        pass
     # tags.
+    tag_elems = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '.QuestionHeader-tags '))).find_elements(By.CSS_SELECTOR, 'a div')
     tags = []
-    tags = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 
-            '.QuestionHeader-tags '))).find_elements(By.CSS_SELECTOR, 'a div')
-    for t in tags:
-        qa['tags'].append(t.get_attribute('textContent'))
+    for t in tag_elems:
+        tags.append(t.get_attribute('textContent'))
+    database.update_qa(id, question, answer_raw, voters, author, tags)
 
 TOPICS = [
     "职场",
@@ -125,22 +132,19 @@ TOPICS = [
 
 def fetch_zhihu_qa_links():
     b = init_browser()
-    database.init()
+    database.open()
     for t in TOPICS:
-        fetch_zhihu_topic_top_links(b, t, 200)
+        fetch_zhihu_topic_top_links(b, t, 10)
     database.close()
     b.quit()
 
 def fetch_zhihu_all_qa():
     b = init_browser(True)
-    database.init()
+    database.open()
     for new_qa in tqdm.tqdm(database.select_new_qa()):
         fetch_zhihu_qa(b, *new_qa)
-
     database.close()
     b.quit()
 
 #fetch_zhihu_qa_links()
 fetch_zhihu_all_qa()
-#with open('./data/qa.txt', 'r') as f:
-#    print(json.loads(f.read()))
