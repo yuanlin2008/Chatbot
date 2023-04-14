@@ -42,13 +42,15 @@ def _insert_tag(tag):
 		_cursor.execute('select id from Tag where name=?', (tag,))
 		return _cursor.fetchone()[0]
 
-def update_qa(id, question, answer_raw, voters, author, tags):
+def update_qa(id, question = "", answer_raw = None, 
+	      voters = None, author = None, author_id = None, 
+		  collected = None, dt = None, tags = []):
 	global _conn
 	global _cursor
 	qa_tags = []
 	for tag in tags:
 		qa_tags.append((id, _insert_tag(tag)))
 	_cursor.executemany('insert into QATags(qa, tag) values(?, ?)', qa_tags)
-	_cursor.execute("update QA set question=?, answer_raw=?, voters=?, author=?  where id=?", 
-							(question, answer_raw, voters, author, id))
+	_cursor.execute("update QA set question=?, answer_raw=?, voters=?, author=?, author_id=?, collected=?, datetime=? where id=?", 
+							(question, answer_raw, voters, author, author_id, collected, dt, id))
 	_conn.commit()

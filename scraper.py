@@ -4,6 +4,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.relative_locator import locate_with
 import time
 import os
 import win32api
@@ -68,23 +69,32 @@ def cache_dyn_page_mouse(browser:webdriver.Chrome, num:int):
     time.sleep(2)
 
 
-def update_topic(browser:webdriver.Chrome, topic:str, num:int):
+class Wait:
+    def __init__(self, browser:webdriver.Chrome) -> None:
+        self.wait = WebDriverWait(browser, 10)
+    
+    def one(self, css_selector:str):
+        return self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, css_selector)))
+    def all(self, css_selector:str):
+        return self.wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, css_selector)))
+
+
+def update_topic_top_qa_links(browser:webdriver.Chrome, topic:str, num:int):
     """
-    更新知乎话题精华链接列表.
+    更新知乎话题精华问答链接列表.
     """
+    print(f'开始更新主题问答列表:{topic}...')
     # 搜索话题
     browser.get(f'https://www.zhihu.com/search?q={topic}&type=topic')
-    wait = WebDriverWait(browser, 10)
+    wait = Wait(browser)
     # 选择第一个话题搜索结果.
-    topic_link = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-za-detail-view-path-index="0"] .ContentItem-head .ContentItem-title a'))).get_attribute('href')
+    topic_link = wait.one('[data-za-detail-view-path-index="0"] .ContentItem-head .ContentItem-title a').get_attribute('href')
     topic_link += '/top-answers'
-    print(topic_link)
     browser.get(topic_link)
     cache_dyn_page_mouse(browser, num)
 
-    wait = WebDriverWait(browser, 10)
     # 话题名称
-    topic_name = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'div.TopicMetaCard-title'))).get_attribute('textContent')
+    topic_name = wait.one('div.TopicMetaCard-title').get_attribute('textContent')
     # 话题列表.
     topics = browser.find_elements(By.CLASS_NAME, 'List-item.TopicFeedItem')
     valid_num = 0
@@ -100,57 +110,116 @@ def update_topic(browser:webdriver.Chrome, topic:str, num:int):
                 new_num+=1
     print(f'话题:{topic_name}({new_num}/{valid_num}/{len(topics)})')
 
+def update_user_qa_links(browser:webdriver.Chrome, user_id:str, max_page:int):
+    """
+    更新用户问答链接列表.
+    """
+    print(f'开始更新用户问答列表:{user_id}...')
+    wait = Wait(browser)
+    # 获得页数
+    page_num = 1
+    new_num = 0
+    browser.get(f'https://www.zhihu.com/people/{user_id}/answers')
+    try:
+        page_num = int(wait.all('.Pagination > button')[-2].get_attribute('textContent'))
+    except:
+        page_num = 1
+    page_num = min(max_page, page_num) if max_page > 0 else page_num
+
+    for i in tqdm.trange(page_num):
+        browser.get(f'https://www.zhihu.com/people/{user_id}/answers?page={i+1}')
+        # 问答列表.
+        qa_elems = wait.all('.List.Profile-answers .List-item h2 a')
+        for qa_elem in qa_elems:
+            ref = qa_elem.get_attribute('href')
+            if database.insert_qa(ref):
+                new_num += 1
+    print(f'新增问答{new_num}')
+
 def update_qa(browser:webdriver.Chrome, id:int, url:str):
     """
-    更新知乎一个问答
+    更新知乎一个问答数据
     """
     # qa
     browser.get(url)
-    wait = WebDriverWait(browser, 10)
-    question = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'h1.QuestionHeader-title'))).get_attribute('textContent')
-    answer_raw = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '.AnswerCard .css-1g0fqss'))).get_attribute('innerHTML')
-    vote_str = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '.AnswerCard .Voters > .Button.FEfUrdfMIKpQDJDqkjte.Button--plain.fEPKGkUK5jyc4fUuT0QP'))).get_attribute('textContent')
+    wait = Wait(browser)
+    # 问题
+    question = wait.one('h1.QuestionHeader-title').get_attribute('textContent')
+    # 回答
+    answer_raw = wait.one('.AnswerCard .css-1g0fqss').get_attribute('innerHTML')
+    # 赞同
+    vote_str = wait.one('.AnswerCard .Voters > .Button.FEfUrdfMIKpQDJDqkjte.Button--plain.fEPKGkUK5jyc4fUuT0QP').get_attribute('textContent')
     voters = int(vote_str.split()[0].replace(',', ''))
+    # 作者
     author = None
+    author_id = None
     try:
-        author_elem = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '.AnswerAuthor-user-name')))
-        author = author_elem.find_element(By.CSS_SELECTOR, 'a.UserLink-link').get_attribute('textContent')
+        author_elem = wait.one('.AnswerAuthor-user-name').find_element(By.CSS_SELECTOR, 'a.UserLink-link')
+        author = author_elem.get_attribute('textContent')
+        author_id = author_elem.get_attribute('href').split('/')[-1]
     except:
         pass
+    # 被收藏.
+    collected = 0
+    try:
+        collected = int(wait.one('.Card[aria-label="更多回答信息"] .Card-header button').get_attribute('textContent'))
+    except:
+        pass
+
+    # 日期
+    datetime = wait.one('.AnswerCard span[aria-label^="发布于"]').get_attribute('textContent')[3:]
+
     # tags.
-    tag_elems = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '.QuestionHeader-tags '))).find_elements(By.CSS_SELECTOR, 'a div')
+    tag_elems = wait.one('.QuestionHeader-tags').find_elements(By.CSS_SELECTOR, 'a div')
     tags = []
     for t in tag_elems:
         tags.append(t.get_attribute('textContent'))
-    database.update_qa(id, question, answer_raw, voters, author, tags)
+    database.update_qa(id, question, answer_raw, voters, author, author_id, collected, datetime, tags)
 
 def update_all_qa(browser:webdriver.Chrome):
-    print("开始更新问答")
+    print(f'开始更新新增问答...')
     for new_qa in tqdm.tqdm(database.select_new_qa()):
-        update_qa(browser, *new_qa)
+        try:
+            update_qa(browser, *new_qa)
+        except:
+            #database.update_qa(new_qa[0])
+            pass
+    print(f'新增问答更新结束')
 
 app = typer.Typer()
 
 @app.command()
 def topic(topic:str, time:int = 60):
+    """
+    抓取一个主题问答
+    """
     database.open()
     b = init_browser()
-    update_topic(b, topic, time)
-    b.quit()
-    b = init_browser(True)
-    update_all_qa(b)
+    update_topic_top_qa_links(b, topic, time)
     b.quit()
     database.close()
 
 @app.command()
-def author(author:str):
+def user(user_id:str, max_page:int = 0):
+    """
+    抓取一个用户问答.
+    """
     database.open()
-    b = init_browser()
-    # 更新用户问答.
+    b = init_browser(True)
+    update_user_qa_links(b, user_id, max_page)
+    b.quit()
+    database.close()
+
+@app.command()
+def update():
+    """
+    更新当前问答.
+    """
+    database.open()
+    b = init_browser(True)
     update_all_qa(b)
     b.quit()
     database.close()
-    pass
 
 if __name__ == "__main__":
     app()
