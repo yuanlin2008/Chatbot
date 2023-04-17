@@ -67,7 +67,7 @@ def update_qa(id, question = "", answer_raw = None,
 		''', (question, answer_raw, voters, author, author_id, collected, dt, id))
 	_conn.commit()
 
-def clean(clean_fun):
+def clean(clean_fun, all):
 	"""
 	数据清洗
 	"""
@@ -83,11 +83,16 @@ def clean(clean_fun):
 	_conn.commit()
 
 	# answer_raw to answer
-	rows = _cursor.execute('''
+	sql = '''
+		SELECT id, answer_raw 
+		FROM QA 
+		WHERE (question IS NOT NULL AND question != "")
+	''' if all else '''
 		SELECT id, answer_raw 
 		FROM QA 
 		WHERE (question IS NOT NULL AND question != "" AND answer IS NULL)
-	''').fetchall()
+	'''
+	rows = _cursor.execute(sql).fetchall()
 	for row in tqdm.tqdm(rows):
 		txt = clean_fun(row[1])
 		_cursor.execute('''

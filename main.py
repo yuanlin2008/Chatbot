@@ -1,4 +1,5 @@
 import typer
+from typing import List
 import html2text
 
 import scraper
@@ -7,24 +8,26 @@ import database
 app = typer.Typer()
 
 @app.command()
-def topic(topic:str, time:int = 60):
+def topic(topics:List[str], time:int = 60):
     """
-    抓取一个主题问答
+    抓取主题问答
     """
     database.open()
     b = scraper.init_browser()
-    scraper.update_topic_top_qa_links(b, topic, time)
+    for t in topics:
+        scraper.update_topic_top_qa_links(b, t, time)
     b.quit()
     database.close()
 
 @app.command()
-def user(user_id:str, max_page:int = 0):
+def user(user_ids:List[str], max_page:int = 0):
     """
-    抓取一个用户问答.
+    抓取用户问答.
     """
     database.open()
     b = scraper.init_browser(True)
-    scraper.update_user_qa_links(b, user_id, max_page)
+    for u in user_ids:
+        scraper.update_user_qa_links(b, u, max_page)
     b.quit()
     database.close()
 
@@ -40,7 +43,7 @@ def update():
     database.close()
 
 @app.command()
-def clean():
+def clean(all:bool = False):
     """
     数据清洗
     """
@@ -48,7 +51,7 @@ def clean():
     h2t = html2text.HTML2Text()
     h2t.ignore_links = True
     h2t.ignore_images = True
-    database.clean(h2t.handle)
+    database.clean(h2t.handle, all)
     database.close()
 
 if __name__ == "__main__":
