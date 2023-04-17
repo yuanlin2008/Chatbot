@@ -1,7 +1,5 @@
 import sqlite3
-import html2text
 import tqdm
-import typer
 
 _conn = None
 _cursor = None
@@ -69,35 +67,32 @@ def update_qa(id, question = "", answer_raw = None,
 		''', (question, answer_raw, voters, author, author_id, collected, dt, id))
 	_conn.commit()
 
-
-app = typer.Typer()
-
-@app.command()
-def clean():
+def clean(clean_fun):
 	"""
 	数据清洗
 	"""
 	global _conn
 	global _cursor
-	open()
-	h2t = html2text.HTML2Text()
-	h2t.ignore_links = True
-	h2t.ignore_images = True
 
+	# 清理无效的QA.
+	_cursor.execute('''
+		UPDATE QA
+		SET question = ""
+		WHERE question IS NULL
+	''')
+	_conn.commit()
+
+	# answer_raw to answer
 	rows = _cursor.execute('''
 		SELECT id, answer_raw 
 		FROM QA 
 		WHERE (question IS NOT NULL AND question != "" AND answer IS NULL)
 	''').fetchall()
 	for row in tqdm.tqdm(rows):
-		txt = h2t.handle(row[1])
+		txt = clean_fun(row[1])
 		_cursor.execute('''
 			UPDATE QA
 			SET answer = ?
 			WHERE id = ?
 		''', (txt, row[0]))
 		_conn.commit()
-	close()
-
-if __name__ == "__main__":
-    app()

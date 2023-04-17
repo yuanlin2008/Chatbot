@@ -1,16 +1,13 @@
 import undetected_chromedriver as uc
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.relative_locator import locate_with
 import time
 import os
 import win32api
 import win32con
 import tqdm
-import typer
 import database
 
 def init_browser(headless = False):
@@ -185,41 +182,3 @@ def update_all_qa(browser:webdriver.Chrome):
             #database.update_qa(new_qa[0])
             pass
     print(f'新增问答更新结束')
-
-app = typer.Typer()
-
-@app.command()
-def topic(topic:str, time:int = 60):
-    """
-    抓取一个主题问答
-    """
-    database.open()
-    b = init_browser()
-    update_topic_top_qa_links(b, topic, time)
-    b.quit()
-    database.close()
-
-@app.command()
-def user(user_id:str, max_page:int = 0):
-    """
-    抓取一个用户问答.
-    """
-    database.open()
-    b = init_browser(True)
-    update_user_qa_links(b, user_id, max_page)
-    b.quit()
-    database.close()
-
-@app.command()
-def update():
-    """
-    更新当前问答.
-    """
-    database.open()
-    b = init_browser(True)
-    update_all_qa(b)
-    b.quit()
-    database.close()
-
-if __name__ == "__main__":
-    app()
