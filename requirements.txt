@@ -1,0 +1,5 @@
+typer[all]
+html2text
+undetected_chromedriver
+pywin32
+tqdm
